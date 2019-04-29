@@ -1,0 +1,211 @@
+namespace ca.mcgill.ecse223.block.model;
+class PlayedGame {
+
+  // State Machine
+  
+  playStatus {
+    Ready {
+      entry / { doSetup(); }
+      play -> Moving;
+    }
+    Moving {
+      pause -> Paused;
+      move [hitPaddle()] / { doHitPaddleOrWall(); } -> Moving;
+      move [isOutOfBoundsAndLastLife()] / { doOutOfBounds(); } -> GameOver;
+      move [isOutOfBounds()] / { doOutOfBounds(); } -> Paused;
+      move [hitLastBlockAndLastLevel()] / { doHitBlock(); } -> GameOver;
+      move [hitLastBlock()] / { doHitBlockNextLevel(); } -> Ready;
+      move [hitBlock()] / { doHitBlock(); } -> Moving;
+      move [hitWall()] / { doHitPaddleOrWall(); } -> Moving;
+      move / { doHitNothingAndNotOutOfBounds(); } -> Moving;
+    }
+    Paused {
+      play -> Moving;
+    }
+    GameOver {
+      entry / { doGameOver(); }
+    }
+  }
+  
+  // Guards
+  
+  private boolean hitPaddle() {
+  
+    BouncePoint bp = calculateBouncePointPaddle();
+	setBounce(bp);
+    return bp!=null;
+    
+  }
+
+  private boolean isOutOfBoundsAndLastLife() {
+  	boolean outOfBounds = false;
+  	int lives = this.getLives();
+  	if(lives==1){
+  	outOfBounds=this.isBallOutOfBounds();
+  	} 
+    // TODO implement
+    return outOfBounds;
+  }
+  
+  private boolean isBallOutOfBounds(){
+  	boolean isBallOutOfBounds = false;
+  	isBallOutOfBounds=this.getCurrentBallY()>(Game.PLAY_AREA_SIDE-(Ball.BALL_DIAMETER)/2);
+  	return isBallOutOfBounds;
+  }
+  
+  private boolean isOutOfBounds() {
+    // TODO implement
+    boolean isOutOfBounds=this.isBallOutOfBounds();
+    return isOutOfBounds;
+  }
+  
+  private boolean hitLastBlockAndLastLevel() {
+    // TODO implement
+    Game game = this.getGame();
+    int nrLevels = game.numberOfLevels();
+    setBounce(null);
+    if (nrLevels == currentLevel){
+    	int nrBlocks = numberOfBlocks();
+   	    if(nrBlocks == 1){
+     		 PlayedBlockAssignment block = getBlock(0);
+    		 BouncePoint bp = calculateBouncePointBlock(block);
+    		 setBounce(bp);
+      		 return (bp!=null);
+      	}
+    }
+    return false;
+  }
+  
+  private boolean hitLastBlock(){
+    // TODO implement
+    int nrBlocks = this.numberOfBlocks();
+    setBounce(null);
+    if(nrBlocks == 1){
+    	PlayedBlockAssignment block = getBlock(0);
+    	BouncePoint bp = calculateBouncePointBlock(block);
+     	setBounce(bp);
+   	    return (bp!=null);
+    }
+    return false;
+  }
+  
+  private boolean hitBlock() {
+    // TODO implement
+    int nrBlocks = this.numberOfBlocks();
+    setBounce(null);
+    for (int i=0; i <= (nrBlocks-1); i++){
+    	PlayedBlockAssignment block = getBlock(i);
+    	BouncePoint bp = calculateBouncePointBlock(block);
+    	BouncePoint bounce = getBounce();
+    	boolean closer = isCloser(bp,bounce);
+    	if (closer){
+			setBounce(bp);
+		}
+    }
+    return (getBounce()!=null);
+  }
+  
+  private boolean hitWall() {
+    BouncePoint bp = calculateBouncePointWall();
+    setBounce(bp);
+    return bp!=null;
+    
+  }
+  
+  // Actions
+  
+  
+  
+    private void doSetup() {
+    resetCurrentBallX();
+    resetCurrentBallY();
+    resetBallDirectionX();
+    resetBallDirectionY();
+    resetCurrentPaddleX();
+    Game game = getGame();
+    Level level = game.getLevel(currentLevel-1);
+    List<BlockAssignment> assignments = level.getBlockAssignments();
+    for(BlockAssignment a: assignments){
+    	PlayedBlockAssignment pblock = new PlayedBlockAssignment(Game.WALL_PADDING+(Block.SIZE+Game.COLUMNS_PADDING)*(a.getGridHorizontalPosition()-1),Game.WALL_PADDING+(Block.SIZE +Game.ROW_PADDING)*(a.getGridVerticalPosition()-1),a.getBlock(),this);
+    }
+    while(numberOfBlocks()<game.getNrBlocksPerLevel()){
+    	Random r1 = new Random();
+    	Random r2 = new Random();
+    	int x = Game.WALL_PADDING + (Block.SIZE + Game.COLUMNS_PADDING)*(Math.abs(r1.nextInt())%((Game.PLAY_AREA_SIDE - 2*Game.WALL_PADDING - Game.COLUMNS_PADDING)/(Block.SIZE+Game.COLUMNS_PADDING)));
+    	int y = Game.WALL_PADDING + (Block.SIZE + Game.ROW_PADDING)*(Math.abs(r2.nextInt())%5);
+    	boolean occupied = false;
+    	for(PlayedBlockAssignment assignment:this.getBlocks()){
+    		if(assignment.getX() == x && assignment.getY() == y){
+    			occupied = true;
+    		}
+    	}
+    	if(!occupied) {
+    		PlayedBlockAssignment pblock = new PlayedBlockAssignment(x,y,game.getRandomBlock(),this);
+    	}
+    }
+  }
+  
+  private void doHitPaddleOrWall() {
+    bounceBall();
+  }
+
+  private void doOutOfBounds() {
+    // TODO implement
+    this.setLives(this.getLives()-1);
+    this.resetCurrentBallX();
+    this.resetCurrentBallY();
+    this.resetBallDirectionX();
+    this.resetBallDirectionY();
+    this.resetCurrentPaddleX();
+  }
+
+  private void doHitBlock() {
+    // TODO implement
+    int score = getScore();
+    BouncePoint bounce = getBounce();
+    PlayedBlockAssignment pblock = bounce.getHitBlock();
+	Block block = pblock.getBlock();
+    int points = block.getPoints();
+   	setScore(score + points);
+ 	pblock.delete();
+    bounceBall();
+
+  }
+
+  private void doHitBlockNextLevel() {
+    // TODO implement
+    doHitBlock();
+    int level = getCurrentLevel();
+    setCurrentLevel(level+1);
+    setCurrentPaddleLength(getGame().getPaddle().getMaxPaddleLength()-
+    (getGame().getPaddle().getMaxPaddleLength()-getGame().getPaddle().getMinPaddleLength())/
+    (getGame().numberOfLevels()-1)*(getCurrentLevel()-1));
+    setWaitTime(INITIAL_WAIT_TIME *
+    Math.pow(getGame().getBall().getBallSpeedIncreaseFactor(),(getCurrentLevel()-1)));
+  }
+
+  private void doHitNothingAndNotOutOfBounds() {    
+    double x = currentBallX;
+    double y = currentBallY;
+    
+    double dx = ballDirectionX;
+    double dy = ballDirectionY;
+    
+    currentBallX = x + dx;
+    currentBallY = y + dy;
+  }
+
+  private void doGameOver() {
+    // TODO implement
+    Block223 block223=this.getBlock223();
+    Player p=this.getPlayer();
+    if(p!=null){
+    Game game=this.getGame();
+    HallOfFameEntry hof = new HallOfFameEntry(this.getScore(),this.getPlayername(),p,game,block223);
+    game.setMostRecentEntry(hof);
+    }
+    this.delete();
+  }
+  
+
+}
